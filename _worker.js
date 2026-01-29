@@ -70,42 +70,30 @@ const parseAddressPort = (seg) => {
 // =============================================================================
 const parserSq = (raw) => {
   let username, password, hostname, port;
-  // 动态构造正则，避免静态特征
-  const reGlobal = new RegExp(`^(${P_S}5?|https?):\\/\\/`, 'i');
-  
-  if (raw.includes('://') && !raw.match(reGlobal)) {
+  // 局部代理形式：user:pass@host:port 或 base64@host:port
+  let authPart = '', hostPart = raw;
+  const at = raw.lastIndexOf('@');
+  if (at !== -1) { authPart = raw.substring(0, at); hostPart = raw.substring(at + 1); }
+  if (authPart && !authPart.includes(':')) {
     try {
-      const u = new URL(raw);
-      hostname = u.hostname;
-      port = u.port || (u.protocol === 'http:' ? 80 : 1080);
-      const auth = u.username || u.password ? `${u.username}:${u.password}` : u.username;
-      if (auth && auth.includes(':')) [username, password] = auth.split(':');
-      else if (auth) {
-        const dec = atob(auth.replace(/%3D/g, '=').padEnd(auth.length + (4 - auth.length % 4) % 4, '=')); 
-        const p = dec.split(':'); if (p.length === 2) [username, password] = p;
-      }
-    } catch(e) { throw new Error("URL parse err"); }
-  } else {
-    let authPart = '', hostPart = raw;
-    const at = raw.lastIndexOf('@');
-    if (at !== -1) { authPart = raw.substring(0, at); hostPart = raw.substring(at + 1); }
-    if (authPart && !authPart.includes(':')) {
-      try { 
-        const dec = atob(authPart.replace(/%3D/g, '=').padEnd(authPart.length + (4 - authPart.length % 4) % 4, '=')); 
-        const p = dec.split(':'); if (p.length === 2) [username, password] = p; 
-      } catch {}
-    }
-    if (!username && authPart && authPart.includes(':')) [username, password] = authPart.split(':');
-    const [h, p] = parseAddressPort(hostPart);
-    hostname = h; port = p || (raw.includes('http=') ? 80 : 1080);
+      const dec = atob(authPart.replace(/%3D/g, '=').padEnd(authPart.length + (4 - authPart.length % 4) % 4, '='));
+      const p = dec.split(':'); if (p.length === 2) [username, password] = p;
+    } catch {}
   }
+  if (!username && authPart && authPart.includes(':')) {
+    const idx = authPart.indexOf(':');
+    username = authPart.substring(0, idx);
+    password = authPart.substring(idx + 1);
+  }
+  const [h, p] = parseAddressPort(hostPart);
+  hostname = h; port = p || (raw.includes('http=') ? 80 : 1080);
   if (!hostname || isNaN(port)) throw new Error("Invalid cfg");
   return { username, password, hostname, port };
 };
 
 function parsePC(path) {
   let proxyIP = null, sq = null, enSq = null, gp = null;
-  
+
   // 1. 全局代理 (动态正则)
   const reG = new RegExp(`(${P_S}5?|https?):\\/\\/([^/#?]+)`, 'i');
   const gm = path.match(reG);
@@ -161,7 +149,13 @@ async function connSq(at, ar, pr, cfg) {
   if (at === 1) DST = new Uint8Array([1, ...ar.split(".").map(Number)]);
   else if (at === 2) DST = new Uint8Array([3, ar.length, ...enc.encode(ar)]);
   else if (at === 3) {
-    const b = ar.slice(1, -1).split(':').flatMap(h => [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16)]);
+    const ipv6 = ar.slice(1, -1);
+    const parts = ipv6.split(':');
+    const b = [];
+    for (const part of parts) {
+      const val = parseInt(part || '0', 16);
+      b.push((val >> 8) & 0xff, val & 0xff);
+    }
     DST = new Uint8Array([4, ...b]);
   }
   await w.write(new Uint8Array([5, 1, 0, ...DST, (pr >> 8) & 0xff, pr & 0xff]));
@@ -274,7 +268,7 @@ const handle = (ws, pip, sq, enSq, gp, uid) => {
       cleanSock();
       if (pendBytes > MAX_PENDING * 2) { while (pendBytes > MAX_PENDING && pend.length > 5) { const drop = pend.shift(); pendBytes -= drop.length; pool.free(drop); } }
       await new Promise(res => setTimeout(res, d)); conn = true;
-      sock = connect({ hostname: info.host, port: info.port }); await sock.opened;
+      sock = await tryConnect(info.host, info.port, info.addressType); if (sock.opened) await sock.opened;
       w = sock.writable.getWriter(); r = sock.readable.getReader(); const bt = pend.splice(0, 10);
       for (const b of bt) { await w.write(b); pendBytes -= b.length; pool.free(b); }
       conn = false; reconns = 0; score = Math.min(1.0, score + 0.15); stalls = 0; lastAct = Date.now(); readLoop();

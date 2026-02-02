@@ -1035,6 +1035,99 @@ UUID_REFRESH = 86400
 *   **权限要求**：API Token 需要 `Account Analytics:Read` 权限。
 *   **查询范围**：自动查询当日 00:00 UTC 至当前时间的所有请求。
 
+---
+
+### 📖 Cloudflare API 配置图文教程
+
+#### 一、获取 Account ID（账户 ID）
+
+**步骤 1**：登录 Cloudflare Dashboard，在左侧菜单找到 **计算和 AI** → **Workers 和 Pages**。
+
+<img width="200" alt="Workers和Pages入口" src="./issue/计算和AI.png" />
+
+**步骤 2**：在右侧页面找到 **Account Details** 区域，复制 **Account ID**。
+
+<img width="400" alt="Account ID位置" src="./issue/账户ID.png" />
+
+---
+
+#### 二、方案 A：创建 API Token（推荐）
+
+> **推荐理由**：API Token 权限可控，安全性更高，可随时撤销。
+
+**步骤 1**：点击左侧菜单底部的 **管理账户** → **帐户 API 令牌**。
+
+<img width="200" alt="帐户API令牌入口" src="./issue/创建账户API.png" />
+
+**步骤 2**：点击右侧的 **创建令牌** 按钮。
+
+<img width="800" alt="创建令牌按钮" src="./issue/创建账户API令牌.png" />
+
+**步骤 3**：在 **API 令牌模板** 列表中，找到 **阅读分析数据和日志**，点击右侧的 **使用模板** 按钮。
+
+<img width="600" alt="选择模板" src="./issue/API模版为阅读分析数据和日志.png" />
+
+**步骤 4**：配置令牌权限（模板已自动配置好权限，只需配置区域资源）：
+- **区域资源**：选择 **包括** → **帐户的所有区域** → 选择你的 **账户名称**
+
+<img width="800" alt="配置权限" src="./issue/创建令牌完整流程.png" />
+
+**步骤 5**：滚动到页面底部，点击 **创建令牌** 按钮。
+
+<img width="600" alt="确认创建" src="./issue/确定创建账户API令牌.png" />
+
+**步骤 6**：创建成功后，**立即复制并保存 Token**（只显示一次，关闭后无法再次查看）。
+
+---
+
+#### 三、方案 B：获取 Email + Global API Key
+
+> **适用场景**：如果你不想创建新的 API Token，可以使用账户的 Global API Key。
+
+**步骤 1：获取 Email（电子邮件）**
+
+1. 点击 Cloudflare 右上角的 **头像图标**。
+2. 在下拉菜单中点击 **配置文件**。
+
+<img width="200" alt="配置文件入口" src="./issue/邮箱定位.png" />
+
+3. 在 **个人简介** → **设置** 页面，找到 **电子邮件** 字段，这就是你的 `CF_EMAIL`。
+
+<img width="400" alt="电子邮件位置" src="./issue/查看个人邮箱.png" />
+
+**步骤 2：获取 Global API Key**
+
+1. 在左侧菜单点击 **API 令牌**。
+2. 滚动到页面底部，找到 **API 密钥** 区域。
+3. 在 **Global API Key** 行，点击右侧的 **查看** 按钮。
+4. 输入密码验证后，复制显示的 Key，这就是你的 `CF_KEY`。
+
+<img width="800" alt="Global API Key位置" src="./issue/创建全局API.png" />
+
+> ⚠️ **安全提示**：Global API Key 拥有账户的完全访问权限，请妥善保管，不要泄露给他人。建议优先使用方案 A（API Token）。
+
+---
+
+#### 四、配置环境变量
+
+获取到所需信息后，在 Cloudflare Workers 后台 **设置** → **变量** 中添加：
+
+**方案 A（推荐）：**
+```
+CF_ID = 你的Account ID
+CF_TOKEN = 你创建的API Token
+```
+
+**方案 B：**
+```
+CF_EMAIL = 你的Cloudflare登录邮箱
+CF_KEY = 你的Global API Key
+```
+
+配置完成后，后台首页的 3D 球体将显示准确的今日请求统计数据。
+
+---
+
 ### 方式 2：D1 内部统计（备用）
 
 *   **优势**：无需配置 API，自动累加。
